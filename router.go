@@ -104,12 +104,17 @@ func (r *router) Any(pattern string, h ...Handler) Route {
 	return r.addRoute("*", pattern, h)
 }
 
+var emptyParams = Params(map[string]string{})
+
 func (r *router) Handle(res http.ResponseWriter, req *http.Request, context Context) {
 	for _, route := range r.routes {
 		ok, vals := route.Match(req.Method, req.URL.Path)
 		if ok {
-			params := Params(vals)
-			context.Map(params)
+			if vals != nil {
+				context.Map(Params(vals))
+			} else {
+				context.Map(emptyParams)
+			}
 			route.Handle(context, res)
 			return
 		}
@@ -217,16 +222,17 @@ func (r route) Match(method string, path string) (bool, map[string]string) {
 	}
 
 	matches := r.regex.FindStringSubmatch(path)
-	if len(matches) > 0 && matches[0] == path {
-		params := make(map[string]string)
-		for i, name := range r.regex.SubexpNames() {
-			if len(name) > 0 {
-				params[name] = matches[i]
-			}
-		}
-		return true, params
+	if len(matches) == 0 || matches[0] != path {
+		return false, nil
 	}
-	return false, nil
+
+	params := make(map[string]string)
+	for i, name := range r.regex.SubexpNames() {
+		if len(name) > 0 {
+			params[name] = matches[i]
+		}
+	}
+	return true, params
 }
 
 func (r *route) Validate() {
