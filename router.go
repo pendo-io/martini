@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Params is a map of name/value pairs for named routes. An instance of martini.Params is available to be injected into any route handler.
@@ -174,10 +175,13 @@ type route struct {
 	handlers []Handler
 	pattern  string
 	name     string
+
+	prefix string
+	all    bool
 }
 
 func newRoute(method string, pattern string, handlers []Handler) *route {
-	route := route{method, nil, handlers, pattern, ""}
+	route := route{method: method, handlers: handlers, pattern: pattern}
 	r := regexp.MustCompile(`:[^/#?()\.\\]+`)
 	pattern = r.ReplaceAllStringFunc(pattern, func(m string) string {
 		return fmt.Sprintf(`(?P<%s>[^/#?]+)`, m[1:])
@@ -190,6 +194,7 @@ func newRoute(method string, pattern string, handlers []Handler) *route {
 	})
 	pattern += `\/?`
 	route.regex = regexp.MustCompile(pattern)
+	route.prefix, route.all = route.regex.LiteralPrefix()
 	return &route
 }
 
@@ -201,6 +206,14 @@ func (r route) Match(method string, path string) (bool, map[string]string) {
 	// add Any method matching support
 	if !r.MatchMethod(method) {
 		return false, nil
+	}
+
+	if !strings.HasPrefix(path, r.prefix) {
+		return false, nil
+	}
+
+	if r.all {
+		return true, nil
 	}
 
 	matches := r.regex.FindStringSubmatch(path)
